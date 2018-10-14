@@ -223,6 +223,8 @@ func parseMatlChunk(c []byte) (int, Material, error) {
 	if err := er.Error(); err != nil {
 		return 0, Material{}, fmt.Errorf("error reading MATL chunk: %v", err)
 	}
+
+	// TODO: some of these floats need renormalizing.
 	matTypeS := d.ReadString("_type", "<missing>")
 	weight := d.ReadFloat("_weight", 1)
 	rough := d.ReadFloat("_rough", 0)
@@ -231,7 +233,7 @@ func parseMatlChunk(c []byte) (int, Material, error) {
 	att := d.ReadFloat("_att", 0)
 	flux := d.ReadFloat("_flux", 0)
 	plastic := d.ReadBool("_plastic", false)
-	_ = d.ReadFloat("_ldr", 0) // not in spec, but present in files
+	ldr := d.ReadFloat("_ldr", 0) // not in spec, but present in files
 
 	if err := d.Error(); err != nil {
 		return 0, Material{}, fmt.Errorf("dict error reading MATL chunk: %v", err)
@@ -255,6 +257,7 @@ func parseMatlChunk(c []byte) (int, Material, error) {
 		Attenuation: att,
 		Flux:        flux,
 		Plastic:     plastic,
+		LDR:         ldr,
 	}, nil
 }
 

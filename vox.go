@@ -49,4 +49,5 @@ type Material struct {
 	IOR         float32
 	Attenuation float32
 	Flux        float32
+	LDR         float32
 }
