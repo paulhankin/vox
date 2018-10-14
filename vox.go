@@ -1,3 +1,5 @@
+// Package vox provides types for describing magicavoxel models,
+// and a parser for .vox files.
 package vox
 
 import "image/color"
