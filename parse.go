@@ -17,17 +17,17 @@ type errReader struct {
 	err error
 }
 
-type Dict struct {
+type dict struct {
 	d    map[string]string
 	read map[string]bool
 	err  error
 }
 
-func (d *Dict) Error() error {
+func (d *dict) Error() error {
 	return d.err
 }
 
-func (d *Dict) AssertNoUnreadFields() error {
+func (d *dict) AssertNoUnreadFields() error {
 	uk := []string{}
 	for k := range d.d {
 		if !d.read[k] {
@@ -40,7 +40,7 @@ func (d *Dict) AssertNoUnreadFields() error {
 	return nil
 }
 
-func (d *Dict) ReadFloat(name string, def float32) float32 {
+func (d *dict) ReadFloat(name string, def float32) float32 {
 	d.read[name] = true
 	if d.err != nil {
 		return def
@@ -56,7 +56,7 @@ func (d *Dict) ReadFloat(name string, def float32) float32 {
 	return float32(f)
 }
 
-func (d *Dict) ReadBool(name string, def bool) bool {
+func (d *dict) ReadBool(name string, def bool) bool {
 	df := float32(0.0)
 	if def {
 		df = 1
@@ -64,7 +64,7 @@ func (d *Dict) ReadBool(name string, def bool) bool {
 	return d.ReadFloat(name, df) != 0
 }
 
-func (d *Dict) ReadString(name string, def string) string {
+func (d *dict) ReadString(name string, def string) string {
 	d.read[name] = true
 	if d.err != nil {
 		return def
@@ -110,8 +110,8 @@ func (er *errReader) ReadString() string {
 	return string(bs)
 }
 
-func (er *errReader) ReadDict() *Dict {
-	d := &Dict{d: map[string]string{}, read: map[string]bool{}}
+func (er *errReader) Readdict() *dict {
+	d := &dict{d: map[string]string{}, read: map[string]bool{}}
 	n := int(er.ReadInt32())
 	for i := 0; i < n; i++ {
 		key := er.ReadString()
@@ -219,7 +219,7 @@ func parseMatlChunk(c []byte) (int, Material, error) {
 	if matID > 255 || matID < 0 {
 		return 0, Material{}, fmt.Errorf("material index %d out of range", matID)
 	}
-	d := er.ReadDict()
+	d := er.Readdict()
 	if err := er.Error(); err != nil {
 		return 0, Material{}, fmt.Errorf("error reading MATL chunk: %v", err)
 	}
