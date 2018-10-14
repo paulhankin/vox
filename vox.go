@@ -19,7 +19,8 @@ type Voxel struct {
 // A Model is one model in a .vox file.
 type Model struct {
 	X, Y, Z int // Size
-	V []Voxel
+	V       []Voxel
+}
 
 // MaterialType describes the nature of a material.
 type MaterialType int
@@ -40,12 +41,10 @@ type Material struct {
 	// material type and a pure diffuse material.
 	Weight float32
 
-	Plastic      float32
-	Roughness    float32
-	Specular     float32
-	IOR          float32
-	Attenuation  float32
-	Power        float32
-	Glow         float32
-	IsTotalPower bool
+	Plastic     bool
+	Roughness   float32
+	Specular    float32
+	IOR         float32
+	Attenuation float32
+	Flux        float32
 }
