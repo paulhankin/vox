@@ -1,3 +1,11 @@
+/* Binary voxtext prints the contents of a magicavox .vox file to stdout.
+
+It's not intended to be useful; simply as a quick test of the parsing code.
+
+Usage:
+
+voxtext myfile.vox
+*/
 package main
 
 import (
