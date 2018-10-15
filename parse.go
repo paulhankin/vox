@@ -1,146 +1,38 @@
 package vox
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"image/color"
 	"io"
 	"log"
-	"strconv"
-	"strings"
+	"os"
 )
 
 const version = 150
 
-type errReader struct {
-	r   io.Reader
-	err error
-}
-
-type dict struct {
-	d    map[string]string
-	read map[string]bool
-	err  error
-}
-
-func (d *dict) Error() error {
-	return d.err
-}
-
-func (d *dict) AssertNoUnreadFields() error {
-	uk := []string{}
-	for k := range d.d {
-		if !d.read[k] {
-			uk = append(uk, k)
-		}
-	}
-	if len(uk) != 0 {
-		return fmt.Errorf("unknown field[s] in dict: %s", strings.Join(uk, ", "))
-	}
-	return nil
-}
-
-func (d *dict) ReadFloat(name string, def float32) float32 {
-	d.read[name] = true
-	if d.err != nil {
-		return def
-	}
-	r, ok := d.d[name]
-	if !ok {
-		return def
-	}
-	f, err := strconv.ParseFloat(r, 32)
-	if err != nil {
-		d.err = fmt.Errorf("error parsing float %q in field %q: %v", r, name, err)
-	}
-	return float32(f)
-}
-
-func (d *dict) ReadBool(name string, def bool) bool {
-	df := float32(0.0)
-	if def {
-		df = 1
-	}
-	return d.ReadFloat(name, df) != 0
-}
-
-func (d *dict) ReadString(name string, def string) string {
-	d.read[name] = true
-	if d.err != nil {
-		return def
-	}
-	r, ok := d.d[name]
-	if !ok {
-		return def
-	}
-	return r
-}
-
-func (er *errReader) Error() error {
-	return er.err
-}
-
-func (er *errReader) ReadBytes(n int) []byte {
-	r := make([]byte, n)
-	if er.err != nil {
-		return r
-	}
-	_, er.err = io.ReadFull(er.r, r)
-	return r
-}
-
-func (er *errReader) ReadUint8() uint8 {
-	if er.err != nil {
-		return 0
-	}
-	r := make([]byte, 1)
-	_, er.err = io.ReadFull(er.r, r)
-	return uint8(r[0])
-}
-
-func (er *errReader) ReadInt32() int32 {
-	b := er.ReadBytes(4)
-	u := uint32(b[0]) + uint32(b[1])<<8 + uint32(b[2])<<16 + uint32(b[3])<<24
-	return int32(u)
-}
-
-func (er *errReader) ReadString() string {
-	n := int(er.ReadInt32())
-	bs := er.ReadBytes(n)
-	return string(bs)
-}
-
-func (er *errReader) Readdict() *dict {
-	d := &dict{d: map[string]string{}, read: map[string]bool{}}
-	n := int(er.ReadInt32())
-	for i := 0; i < n; i++ {
-		key := er.ReadString()
-		val := er.ReadString()
-		d.d[key] = val
-	}
-	if err := er.Error(); err != nil {
-		d.err = err
-	}
-	return d
-}
-
-func parseChunk(er *errReader) (ID string, contents, childContents []byte, err error) {
-	id := er.ReadBytes(4)
-	N := er.ReadInt32()
-	M := er.ReadInt32()
-	if err := er.Error(); err != nil {
+// parseChunk reads a RIFF chunk from the input, returning the ID (MAIN, MATL, etc.)
+// and the bytes that hold the contents of this chunk and any child contents.
+func parseChunk(vr *voxReader) (ID string, contents, childContents []byte, err error) {
+	id := vr.ReadBytes(4)
+	N := vr.ReadInt32()
+	M := vr.ReadInt32()
+	if err := vr.Error(); err != nil {
 		return "", nil, nil, err
 	}
-	c := er.ReadBytes(int(N))
-	cc := er.ReadBytes(int(M))
-	if err := er.Error(); err != nil {
+	c := vr.ReadBytes(int(N))
+	cc := vr.ReadBytes(int(M))
+	if err := vr.Error(); err != nil {
 		return "", nil, nil, err
 	}
 	return string(id), c, cc, nil
 }
 
 func buildMain(models []Model, rgba []color.RGBA, mats []Material) (*Main, error) {
-	// TODO: error checking here!
+	if len(rgba) != 256 {
+		return nil, fmt.Errorf("expected 256 palette entries, but found %d", len(rgba))
+	}
 	return &Main{
 		Models:    models,
 		RGBA:      rgba,
@@ -158,47 +50,61 @@ const (
 	stateMatt
 )
 
+// parsePackChunk reads a PACK chunk from the input,
+// returning the int it contains.
 func parsePackChunk(c []byte) (int, error) {
-	er := &errReader{r: bytes.NewReader(c)}
-	n := er.ReadInt32()
-	return int(n), er.Error()
+	vr := &voxReader{r: bytes.NewReader(c)}
+	n := vr.ReadInt32()
+	vr.RequireEOF()
+	return int(n), vr.Error()
 }
 
+// parseSizeChunk parses a SIZE chunk from the input,
+// returning the size it contains.
 func parseSizeChunk(c []byte) ([3]int32, error) {
-	er := &errReader{r: bytes.NewReader(c)}
-	x := er.ReadInt32()
-	y := er.ReadInt32()
-	z := er.ReadInt32()
-	return [3]int32{x, y, z}, er.Error()
+	vr := &voxReader{r: bytes.NewReader(c)}
+	x := vr.ReadInt32()
+	y := vr.ReadInt32()
+	z := vr.ReadInt32()
+	vr.RequireEOF()
+	return [3]int32{x, y, z}, vr.Error()
 }
 
+// parseXYZIChunk parses an XYZI chunk from the input,
+// returning the voxels it contains.
 func parseXYZIChunk(c []byte) ([]Voxel, error) {
-	er := &errReader{r: bytes.NewReader(c)}
-	N := int(er.ReadInt32())
+	vr := &voxReader{r: bytes.NewReader(c)}
+	N := int(vr.ReadInt32())
 	v := []Voxel{}
 	for i := 0; i < N; i++ {
-		x := er.ReadUint8()
-		y := er.ReadUint8()
-		z := er.ReadUint8()
-		idx := er.ReadUint8()
+		x := vr.ReadUint8()
+		y := vr.ReadUint8()
+		z := vr.ReadUint8()
+		idx := vr.ReadUint8()
 		v = append(v, Voxel{x, y, z, idx})
 	}
-	return v, er.Error()
+	vr.RequireEOF()
+	return v, vr.Error()
 }
 
+// parseRGBAChunk parses an RGBA chunk from the input,
+// returning the colors it contains.
 func parseRGBAChunk(c []byte) ([]color.RGBA, error) {
-	er := &errReader{r: bytes.NewReader(c)}
+	vr := &voxReader{r: bytes.NewReader(c)}
 	r := make([]color.RGBA, 256)
 	for i := range r {
-		cr := er.ReadUint8()
-		cg := er.ReadUint8()
-		cb := er.ReadUint8()
-		ca := er.ReadUint8()
+		cr := vr.ReadUint8()
+		cg := vr.ReadUint8()
+		cb := vr.ReadUint8()
+		ca := vr.ReadUint8()
 		r[i] = color.RGBA{cr, cg, cb, ca}
 	}
-	return r, er.Error()
+	vr.RequireEOF()
+	return r, vr.Error()
 }
 
+// parseMatType returns the corresponding material from
+// the string label in the MATL dict.
 func parseMatType(s string) (MaterialType, error) {
 	switch s {
 	case "_diffuse":
@@ -213,27 +119,30 @@ func parseMatType(s string) (MaterialType, error) {
 	return MaterialDiffuse, fmt.Errorf("unknown material %q", s)
 }
 
+// parseMatlChunk parses a MATL chunk, returning the ID of the
+// material and its properties.
 func parseMatlChunk(c []byte) (int, Material, error) {
-	er := &errReader{r: bytes.NewReader(c)}
-	matID := er.ReadInt32()
+	vr := &voxReader{r: bytes.NewReader(c)}
+	matID := vr.ReadInt32()
 	if matID > 255 || matID < 0 {
 		return 0, Material{}, fmt.Errorf("material index %d out of range", matID)
 	}
-	d := er.Readdict()
-	if err := er.Error(); err != nil {
+	d := vr.ReadDict()
+	vr.RequireEOF()
+	if err := vr.Error(); err != nil {
 		return 0, Material{}, fmt.Errorf("error reading MATL chunk: %v", err)
 	}
 
 	// TODO: some of these floats need renormalizing.
 	matTypeS := d.ReadString("_type", "<missing>")
-	weight := d.ReadFloat("_weight", 1)
-	rough := d.ReadFloat("_rough", 0)
-	spec := d.ReadFloat("_spec", 0)
-	ior := d.ReadFloat("_ior", 0)
-	att := d.ReadFloat("_att", 0)
-	flux := d.ReadFloat("_flux", 0)
+	weight := d.ReadFloat("_weight", 1) * 100
+	rough := d.ReadFloat("_rough", 0) * 100
+	spec := d.ReadFloat("_spec", 0) * 100
+	ior := d.ReadFloat("_ior", 0) + 1.0
+	att := d.ReadFloat("_att", 0) * 100
+	flux := d.ReadFloat("_flux", 0) * 100
 	plastic := d.ReadBool("_plastic", false)
-	ldr := d.ReadFloat("_ldr", 0) // not in spec, but present in files
+	ldr := d.ReadFloat("_ldr", 0) * 100 // not in spec, but present in files
 
 	if err := d.Error(); err != nil {
 		return 0, Material{}, fmt.Errorf("dict error reading MATL chunk: %v", err)
@@ -261,7 +170,8 @@ func parseMatlChunk(c []byte) (int, Material, error) {
 	}, nil
 }
 
-func parseMainChunks(er *errReader) (*Main, error) {
+// parseMainChunks parses the child chunks of a MAIN chunk.
+func parseMainChunks(vr *voxReader) (*Main, error) {
 	state := statePack
 	pack := 1
 	models := []Model{}
@@ -278,7 +188,7 @@ func parseMainChunks(er *errReader) (*Main, error) {
 	}
 
 	for {
-		id, c, cc, err := parseChunk(er)
+		id, c, cc, err := parseChunk(vr)
 		if err == io.EOF {
 			if len(models) != pack {
 				return nil, fmt.Errorf("expected %d models, but got %d", pack, len(models))
@@ -356,8 +266,9 @@ func parseMainChunks(er *errReader) (*Main, error) {
 	}
 }
 
-func parseMainChunk(er *errReader) (*Main, error) {
-	id, contents, childContents, err := parseChunk(er)
+// parseMainChunk parses the top-level MAIN chunk in the .vox file.
+func parseMainChunk(vr *voxReader) (*Main, error) {
+	id, contents, childContents, err := parseChunk(vr)
 	if err != nil {
 		return nil, err
 	}
@@ -367,16 +278,17 @@ func parseMainChunk(er *errReader) (*Main, error) {
 	if len(contents) != 0 {
 		return nil, fmt.Errorf("unexpected MAIN contents")
 	}
-	return parseMainChunks(&errReader{r: bytes.NewReader(childContents)})
+	vr.RequireEOF()
+	return parseMainChunks(&voxReader{r: bytes.NewReader(childContents)})
 }
 
 // Parse reads and parses a magicavoxel .vox file.
 func Parse(r io.Reader) (*Main, error) {
-	er := &errReader{r: r}
-	id := er.ReadBytes(4)
-	ver := er.ReadInt32()
+	vr := &voxReader{r: r}
+	id := vr.ReadBytes(4)
+	ver := vr.ReadInt32()
 
-	if err := er.Error(); err != nil {
+	if err := vr.Error(); err != nil {
 		return nil, fmt.Errorf("failed reading header: %v", err)
 	}
 
@@ -386,5 +298,16 @@ func Parse(r io.Reader) (*Main, error) {
 	if ver != version {
 		return nil, fmt.Errorf("vox file must be version %d, got %d", version, ver)
 	}
-	return parseMainChunk(er)
+	return parseMainChunk(vr)
+}
+
+// Parse reads and parses the file with the given name as a magicavoxel .vox file.
+func ParseFile(filename string) (*Main, error) {
+	f, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	br := bufio.NewReader(f)
+	return Parse(br)
 }
