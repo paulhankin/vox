@@ -63,7 +63,7 @@ func (n Node) isNode() {}
 // its children.
 type TransformNode struct {
 	Node
-	Layer      *Layer           // The layer this node belongs to.
+	Layer      *Layer           // The layer this node belongs to (or nil if it's the root node).
 	Transforms []TransformFrame // Currently must be a single element.
 	Child      AnyNode          // Child nodes that are affected by this transformation.
 }

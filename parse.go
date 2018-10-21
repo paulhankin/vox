@@ -44,12 +44,73 @@ func buildMain(models []Model, rgba []color.RGBA, mats []Material, scene Scene) 
 	}, nil
 }
 
+type addChilder interface {
+	addChild(c AnyNode) error
+}
+
+func (t *TransformNode) addChild(c AnyNode) error {
+	if t.Child != nil {
+		return fmt.Errorf("can't add two children nodes to transform node")
+	}
+	t.Child = c
+	return nil
+}
+
+func (g *GroupNode) addChild(c AnyNode) error {
+	g.Children = append(g.Children, c)
+	return nil
+}
+
 func buildScene(sceneIDs map[int32]AnyNode, sceneChildrenIDs map[int32][]int32, sceneLayers map[int32]int32, layerIDs map[int32]*Layer) (Scene, error) {
 	scene := Scene{}
 	for _, layer := range layerIDs {
 		scene.Layers = append(scene.Layers, *layer)
 	}
 	sort.Slice(scene.Layers, func(i, j int) bool { return scene.Layers[i].Index < scene.Layers[j].Index })
+
+	// The root node in the scene is a transform node with layer -1.
+	var top *TransformNode
+	for k, v := range sceneIDs {
+		if tn, ok := v.(*TransformNode); ok {
+			if lid, ok := sceneLayers[k]; ok && lid == -1 {
+				if top != nil {
+					return scene, fmt.Errorf("scene has two root nodes")
+				}
+				top = tn
+			}
+		}
+	}
+	if top == nil {
+		return scene, fmt.Errorf("failed to find root node in the scene graph")
+	}
+	for scid, children := range sceneChildrenIDs {
+		node, ok := sceneIDs[scid]
+		if !ok {
+			return Scene{}, fmt.Errorf("node %d has children, but doesn't exist in the scene graph", scid)
+		}
+		cs, ok := node.(addChilder)
+		if !ok {
+			return Scene{}, fmt.Errorf("node %d has type %T, which we can't add children to", scid, node)
+		}
+		for _, c := range children {
+			cn, ok := sceneIDs[c]
+			if !ok {
+				return Scene{}, fmt.Errorf("node %d has child %d, but no such node exists", scid, c)
+			}
+			if err := cs.addChild(cn); err != nil {
+				return Scene{}, err
+			}
+		}
+	}
+
+	for k, v := range sceneIDs {
+		fmt.Printf("%d: %#v\n", k, v)
+		fmt.Printf("  %+v\n", sceneChildrenIDs[k])
+		if id, ok := sceneLayers[k]; ok {
+			fmt.Printf("  %+v\n", id)
+		}
+		fmt.Printf("\n")
+	}
 	return scene, nil
 }
 
@@ -348,7 +409,7 @@ func parseMatlChunk(c []byte) (int, Material, error) {
 // parseMainChunks parses the child chunks of a MAIN chunk.
 func parseMainChunks(vr *voxReader) (*Main, error) {
 	state := statePack
-	pack := 1
+	pack := -1
 	models := []Model{}
 	var rgba []color.RGBA
 	mats := []Material{}
@@ -370,7 +431,7 @@ func parseMainChunks(vr *voxReader) (*Main, error) {
 	for {
 		id, c, cc, err := parseChunk(vr)
 		if err == io.EOF {
-			if len(models) != pack {
+			if pack != -1 && len(models) != pack {
 				return nil, fmt.Errorf("expected %d models, but got %d", pack, len(models))
 			}
 			scene, err := buildScene(sceneIDs, sceneChildren, sceneLayer, layerIDs)
@@ -414,12 +475,18 @@ func parseMainChunks(vr *voxReader) (*Main, error) {
 				return nil, err
 			}
 			models = append(models, Model{X: int(size[0]), Y: int(size[1]), Z: int(size[2]), V: vs})
-			if len(models) == pack {
+			if pack != -1 && len(models) == pack {
 				state = stateSceneGraph
 			} else {
-				state = stateXYZI
+				state = stateSize
 			}
 		case "nTRN":
+			if state == stateSize {
+				if pack != -1 {
+					return nil, fmt.Errorf("missing models: expected %d but found %d", pack, len(models))
+				}
+				state = stateSceneGraph
+			}
 			if state != stateSceneGraph {
 				return nil, fmt.Errorf("misplaced nTRN chunk")
 			}
