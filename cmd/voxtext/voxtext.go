@@ -30,5 +30,8 @@ func main() {
 	if err != nil {
 		quitf("Error parsing file: %s", err)
 	}
-	fmt.Printf("%+v\n", main)
+	fmt.Printf("%+v\n\n", main.Models)
+	for i, m := range main.Materials {
+		fmt.Printf("%3d: %s\n", i, m)
+	}
 }

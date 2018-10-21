@@ -40,6 +40,60 @@ func (d *dict) AssertNoUnreadFields() error {
 	return nil
 }
 
+// Read3xInt32 returns 3 int32s read from the dict, defaulting to def.
+func (d *dict) Read3xInt32(name string, def [3]int32) [3]int32 {
+	d.read[name] = true
+	if d.err != nil {
+		return def
+	}
+	r, ok := d.d[name]
+	if !ok {
+		return def
+	}
+	parts := strings.Split(r, " ")
+	if len(parts) != 3 {
+		d.err = fmt.Errorf("error parsing 3xint32 %q in field %q", r, name)
+		return def
+	}
+	var rv [3]int32
+	for i, p := range parts {
+		x, err := strconv.ParseInt(p, 10, 32)
+		if err != nil {
+			d.err = fmt.Errorf("error parsing 3xint32 %q in field %q: %v", r, name, err)
+			return def
+		}
+		rv[i] = int32(x)
+	}
+	return rv
+}
+
+// ReadMatrix3x3 returns a 3x3 matrix, read from the dict, defaulting
+// to 'def'.
+func (d *dict) ReadMatrix3x3(name string, def Matrix3x3) Matrix3x3 {
+	if !def.Valid() {
+		panic("invalid default for ReadMatrix3x3")
+	}
+	d.read[name] = true
+	if d.err != nil {
+		return def
+	}
+	r, ok := d.d[name]
+	if !ok {
+		return def
+	}
+	x, err := strconv.ParseInt(r, 10, 8)
+	if err != nil {
+		d.err = fmt.Errorf("error parsing matrix %q in field %q: %v", r, name, err)
+		return def
+	}
+	rv := Matrix3x3(x)
+	if !rv.Valid() {
+		d.err = fmt.Errorf("invalid matrix %q in field %q", r, name)
+		return def
+	}
+	return rv
+}
+
 // ReadFloat returns a float, read from the dict, defaulting
 // to 'def'.
 func (d *dict) ReadFloat(name string, def float32) float32 {
@@ -54,6 +108,7 @@ func (d *dict) ReadFloat(name string, def float32) float32 {
 	f, err := strconv.ParseFloat(r, 32)
 	if err != nil {
 		d.err = fmt.Errorf("error parsing float %q in field %q: %v", r, name, err)
+		return def
 	}
 	return float32(f)
 }
@@ -98,14 +153,14 @@ func (vr *voxReader) Error() error {
 }
 
 // RequireEOF checks that all input has been consumed.
-func (vr *voxReader) RequireEOF() {
+func (vr *voxReader) RequireEOF(chunk string) {
 	if err := vr.Error(); err != nil {
 		return
 	}
 	_ = vr.ReadUint8()
 	err := vr.Error()
 	if err == nil {
-		vr.err = fmt.Errorf("expected EOF, but found at least one more byte")
+		vr.err = fmt.Errorf("expected EOF, but found at least one more byte in %s chunk", chunk)
 	} else if err == io.EOF {
 		vr.err = nil
 	}
