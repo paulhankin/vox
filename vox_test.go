@@ -2,6 +2,7 @@ package vox
 
 import (
 	"fmt"
+	"image/color"
 	"reflect"
 	"testing"
 )
@@ -46,11 +47,13 @@ func TestParse(t *testing.T) {
 
 	wantMatls := map[int]Material{
 		166: Material{
+			Color:     color.RGBA{0x33, 0x66, 0x66, 0xff},
 			Type:      MaterialMetal,
 			Roughness: 63,
 			Specular:  50,
 		},
 		220: Material{
+			Color:       color.RGBA{0x88, 0, 0, 0xff},
 			Type:        MaterialGlass,
 			Roughness:   78,
 			IOR:         1.8,
