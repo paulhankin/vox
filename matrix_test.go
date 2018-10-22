@@ -124,14 +124,18 @@ func TestMul(t *testing.T) {
 		if !a.Valid() {
 			continue
 		}
+		prods := map[Matrix3x3]bool{}
 		ma := matFromMatrix3x3(a)
 		for b := Matrix3x3(0); b < 128; b++ {
 			if !b.Valid() {
 				continue
 			}
 			mb := matFromMatrix3x3(b)
-
 			ab := a.Mul(b)
+			if !ab.Valid() {
+				t.Errorf("%x * %x = %x isn't Valid()", a, b, ab)
+			}
+			prods[ab] = true
 			mab := ma.mul(mb)
 			abWant := matToMatrix3x3(mab)
 			mabWant := matFromMatrix3x3(ab)
@@ -142,6 +146,9 @@ func TestMul(t *testing.T) {
 			if mab != mabWant {
 				t.Errorf("%v * %v = %v, want %v", ma, mb, mab, mabWant)
 			}
+		}
+		if len(prods) != 48 {
+			t.Errorf("The number of products of valid matrices with %x is %d, want 48", a, len(prods))
 		}
 	}
 }
