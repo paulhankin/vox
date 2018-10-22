@@ -64,3 +64,15 @@ func TestParse(t *testing.T) {
 		}
 	}
 }
+
+func TestSceneParse(t *testing.T) {
+	// scene.vox contains multiple objects on a few different layers in a scene.
+	main, err := ParseFile("testdata/scene.vox")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if main == nil {
+		t.Fatal("no main")
+	}
+	// TODO: verify scene structure etc.
+}

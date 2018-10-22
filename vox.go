@@ -70,6 +70,24 @@ type TransformNode struct {
 
 func (tn *TransformNode) isSceneNode() {}
 
+func (tn *TransformNode) String() string {
+	parts := []string{}
+	if tn.Name != "" {
+		parts = append(parts, fmt.Sprintf("name:%q", tn.Name))
+	}
+	if tn.Hidden {
+		parts = append(parts, "hidden")
+	}
+	if tn.Layer != nil {
+		parts = append(parts, fmt.Sprintf("layer:%d", tn.Layer.Index))
+	}
+	for _, tr := range tn.Transforms {
+		parts = append(parts, tr.String())
+	}
+	parts = append(parts, fmt.Sprintf("child:%p", tn.Child))
+	return fmt.Sprintf("Transform{%s}", strings.Join(parts, ", "))
+}
+
 // Matrix3x3 is an encoded 3x3 orthogonal matrix with entries 0, +1, -1.
 type Matrix3x3 uint8
 
@@ -125,6 +143,10 @@ type TransformFrame struct {
 	T [3]int32  // Translation
 }
 
+func (tn TransformFrame) String() string {
+	return fmt.Sprintf("%#v", tn)
+}
+
 // A GroupNode is a node that can group one or more subnodes.
 type GroupNode struct {
 	Node
@@ -133,11 +155,39 @@ type GroupNode struct {
 
 func (gn *GroupNode) isSceneNode() {}
 
+func (gn *GroupNode) String() string {
+	parts := []string{}
+	if gn.Name != "" {
+		parts = append(parts, fmt.Sprintf("name:%q", gn.Name))
+	}
+	if gn.Hidden {
+		parts = append(parts, "hidden")
+	}
+	for _, c := range gn.Children {
+		parts = append(parts, fmt.Sprintf("child:%p", c))
+	}
+	return fmt.Sprintf("Group{%s}", strings.Join(parts, ", "))
+}
+
 // A ShapeNode is a terminal node in the scene graph that refers
 // to a voxel model.
 type ShapeNode struct {
 	Node
 	Models []*Model // Currently must be a single model.
+}
+
+func (sn *ShapeNode) String() string {
+	parts := []string{}
+	if sn.Name != "" {
+		parts = append(parts, fmt.Sprintf("name:%q", sn.Name))
+	}
+	if sn.Hidden {
+		parts = append(parts, "hidden")
+	}
+	for _, m := range sn.Models {
+		parts = append(parts, fmt.Sprintf("model:%p", m))
+	}
+	return fmt.Sprintf("Shape{%s}", strings.Join(parts, ", "))
 }
 
 // MaterialType describes the nature of a material.

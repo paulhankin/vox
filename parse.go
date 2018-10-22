@@ -61,6 +61,49 @@ func (g *GroupNode) addChild(c AnyNode) error {
 	return nil
 }
 
+type nodeCounter interface {
+	nodeCount(visited map[AnyNode]bool) (int, error)
+}
+
+func (t *TransformNode) nodeCount(visited map[AnyNode]bool) (int, error) {
+	if visited[AnyNode(t)] {
+		return 0, fmt.Errorf("cycle found")
+	}
+	visited[AnyNode(t)] = true
+	r := 1
+	if t.Child != nil {
+		rc, err := t.Child.(nodeCounter).nodeCount(visited)
+		if err != nil {
+			return 0, err
+		}
+		r += rc
+	}
+	return r, nil
+}
+
+func (g *GroupNode) nodeCount(visited map[AnyNode]bool) (int, error) {
+	if visited[AnyNode(g)] {
+		return 0, fmt.Errorf("cycle found")
+	}
+	visited[AnyNode(g)] = true
+	r := 1
+	for _, c := range g.Children {
+		rc, err := c.(nodeCounter).nodeCount(visited)
+		if err != nil {
+			return 0, err
+		}
+		r += rc
+	}
+	return r, nil
+}
+
+func (s *ShapeNode) nodeCount(visited map[AnyNode]bool) (int, error) {
+	if visited[AnyNode(s)] {
+		return 0, fmt.Errorf("cycle found")
+	}
+	return 1, nil
+}
+
 func buildScene(sceneIDs map[int32]AnyNode, sceneChildrenIDs map[int32][]int32, sceneLayers map[int32]int32, layerIDs map[int32]*Layer) (Scene, error) {
 	scene := Scene{}
 	for _, layer := range layerIDs {
@@ -103,14 +146,15 @@ func buildScene(sceneIDs map[int32]AnyNode, sceneChildrenIDs map[int32][]int32, 
 		}
 	}
 
-	for k, v := range sceneIDs {
-		fmt.Printf("%d: %#v\n", k, v)
-		fmt.Printf("  %+v\n", sceneChildrenIDs[k])
-		if id, ok := sceneLayers[k]; ok {
-			fmt.Printf("  %+v\n", id)
-		}
-		fmt.Printf("\n")
+	nc, err := top.nodeCount(map[AnyNode]bool{})
+	if err != nil {
+		return Scene{}, err
 	}
+	if nc != len(sceneIDs) {
+		return Scene{}, fmt.Errorf("not all nodes are in scene. %d nodes, but only %d in scene", len(sceneIDs), nc)
+	}
+
+	scene.Node = top
 	return scene, nil
 }
 
