@@ -88,54 +88,6 @@ func (tn *TransformNode) String() string {
 	return fmt.Sprintf("Transform{%s}", strings.Join(parts, ", "))
 }
 
-// Matrix3x3 is an encoded 3x3 orthogonal matrix with entries 0, +1, -1.
-type Matrix3x3 uint8
-
-// Matrix3x3Identity represents the identity matrix.
-const Matrix3x3Identity = Matrix3x3(4)
-
-func eqm3(a int, b Matrix3x3) int {
-	if a == int(b) {
-		return 1
-	}
-	return 0
-}
-
-func signm3(x Matrix3x3) int {
-	if x == 0 {
-		return 1
-	}
-	return -1
-}
-
-// Valid reports whether m is a valid 3x3 matrix.
-func (m Matrix3x3) Valid() bool {
-	// We can't have the top bit set, and the position of
-	// the non-zero entry in the first and second rows
-	// can't be the same. Neither can be 3.
-	one1 := m & 3
-	one2 := (m >> 2) & 3
-	return m&128 == 0 && one1 != one2 && one1 != 3 && one2 != 3
-}
-
-// Get returns the ith row, jth column of the decoded matrix.
-// It must be that 0 <= i, j <= 2, and it returns 0, 1 or -1.
-func (m Matrix3x3) Get(i, j int) int {
-	// From https://github.com/ephtracy/voxel-model/blob/master/MagicaVoxel-file-format-vox-extension.txt
-	// bit | value
-	// 0-1 : 1 : index of the non-zero entry in the first row
-	// 2-3 : 2 : index of the non-zero entry in the second row
-	// 4   : 0 : the sign in the first row (0 : positive; 1 : negative)
-	// 5   : 1 : the sign in the second row (0 : positive; 1 : negative)
-	// 6   : 1 : the sign in the third row (0 : positive; 1 : negative)
-	if i == 0 {
-		return eqm3(j, m&3) * signm3((m>>4)&1)
-	} else if i == 1 {
-		return eqm3(j, (m>>2)&3) * signm3((m>>5)&1)
-	}
-	return eqm3(j, 6-(m&3)-((m>>2)&3)) * signm3((m>>6)&1)
-}
-
 // TransformFrame describes how a transform node affects
 // its children.
 type TransformFrame struct {
