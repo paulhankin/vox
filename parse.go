@@ -126,6 +126,27 @@ func buildScene(sceneIDs map[int32]AnyNode, sceneChildrenIDs map[int32][]int32, 
 	if top == nil {
 		return scene, fmt.Errorf("failed to find root node in the scene graph")
 	}
+
+	for nid, lid := range sceneLayers {
+		n, ok := sceneIDs[nid]
+		if !ok {
+			return Scene{}, fmt.Errorf("missing node is marked to be on a layer?")
+		}
+		tn, ok := n.(*TransformNode)
+		if !ok {
+			return Scene{}, fmt.Errorf("non-Transform node is on a layer?")
+		}
+		if lid == -1 {
+			// the root node has layer id -1.
+			continue
+		}
+		layer, ok := layerIDs[lid]
+		if !ok {
+			return Scene{}, fmt.Errorf("layer id %d not found", lid)
+		}
+		tn.Layer = layer
+	}
+
 	for scid, children := range sceneChildrenIDs {
 		node, ok := sceneIDs[scid]
 		if !ok {
