@@ -79,3 +79,63 @@ func TestSceneParse(t *testing.T) {
 	}
 	// TODO: verify scene structure etc.
 }
+
+func countVoxels(dw *DenseWorld) (int, error) {
+	count := 0
+	for i := dw.Min[0]; i < dw.Max[0]; i++ {
+		for j := dw.Min[1]; j < dw.Max[1]; j++ {
+			for k := dw.Min[2]; k < dw.Max[2]; k++ {
+				c, ok := dw.MaterialIndex([3]int{i, j, k})
+				if !ok {
+					return 0, fmt.Errorf("failed to read voxel %v", [3]int{i, j, k})
+				}
+				if c != 0 {
+					count++
+				}
+			}
+		}
+	}
+	return count, nil
+}
+
+func TestDenseWorldFromModel(t *testing.T) {
+	main, err := ParseFile("testdata/scene.vox")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mod := main.Models[0]
+
+	// Apply a bunch of rotations and translations, checking we can build the world each time.
+	translations := [][3]int32{[3]int32{0, 0, 0}, [3]int32{-100, 0, 5}, [3]int32{213, 42, 64}, [3]int32{-500, 600, -700}}
+	vxCount := -1
+	for m := Matrix3x3(0); m < 128; m++ {
+		if !m.Valid() {
+			continue
+		}
+		for _, tr := range translations {
+			tf := TransformFrame{m, tr}
+			dw, err := DenseWorldFromModel(tf, mod)
+			if err != nil {
+				t.Errorf("%#v: failed to create dense world: %v", tf, err)
+				continue
+			}
+			vc, err := countVoxels(dw)
+			if err != nil {
+				t.Errorf("%#v: failed to count voxels: %v", tf, err)
+			}
+			if vxCount == -1 {
+				vxCount = vc
+			}
+			if vxCount != vc {
+				t.Errorf("%#v: unexpected voxel count %d (previously found %d)", tf, vc, vxCount)
+			}
+		}
+	}
+	if vxCount < 10 {
+		t.Fatalf("unexpectedly low number of voxels found: %d", vxCount)
+	}
+	if vxCount > int(mod.X)*int(mod.Y)*int(mod.Z) {
+		t.Fatalf("found %d voxels, but that's impossible because the original model was of size %d,%d,%d", vxCount, mod.X, mod.Y, mod.Z)
+	}
+}
