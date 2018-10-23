@@ -1,6 +1,9 @@
 package vox
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 type mat struct {
 	m [3][3]int
@@ -42,6 +45,16 @@ func (a mat) mul(b mat) mat {
 			for k := 0; k < 3; k++ {
 				r.m[i][k] += a.m[i][j] * b.m[j][k]
 			}
+		}
+	}
+	return r
+}
+
+func (m mat) mulVec(v [3]int) [3]int {
+	var r [3]int
+	for i := 0; i < 3; i++ {
+		for j := 0; j < 3; j++ {
+			r[i] += m.m[i][j] * v[j]
 		}
 	}
 	return r
@@ -149,6 +162,59 @@ func TestMul(t *testing.T) {
 		}
 		if len(prods) != 48 {
 			t.Errorf("The number of products of valid matrices with %x is %d, want 48", a, len(prods))
+		}
+	}
+}
+
+func abseq(a, b int) bool {
+	return a == b || a == -b
+}
+
+// vecSeemsPlausible checks that b is a permutation of a, possibly with
+// sign changes. That's always true if b is supposed to be a multiplied by
+// a Matrix3x3.
+func vecSeemsPlausible(a, b [3]int) error {
+	// We iterate over i, j, k, permutations of [0, 1, 2]
+	for i := 0; i < 3; i++ {
+		for j2 := 0; j2 < 2; j2++ {
+			j := j2
+			if j >= i {
+				j++
+			}
+			k := 3 - i - j
+			if abseq(a[0], b[i]) && abseq(a[1], b[j]) && abseq(a[2], b[k]) {
+				return nil
+			}
+		}
+	}
+	return fmt.Errorf("%v is not a permuation (with sign changes) of %v", a, b)
+}
+
+func TestMulVec(t *testing.T) {
+	for m := Matrix3x3(0); m < 128; m++ {
+		if !m.Valid() {
+			continue
+		}
+		ma := matFromMatrix3x3(m)
+
+		// We multiply m with all [x, y, z] where each of x, y, z
+		// are taken from vals.
+		vals := []int{-5, -2, -1, 0, 1, 2, 5}
+		for _, x := range vals {
+			for _, y := range vals {
+				for _, z := range vals {
+					v := [3]int{x, y, z}
+					got := m.MulVec(v)
+					want := ma.mulVec(v)
+					if got != want {
+						t.Errorf("%x * %v = %v, want %v", m, v, got, want)
+						continue
+					}
+					if err := vecSeemsPlausible(v, got); err != nil {
+						t.Errorf("%x * %v = %v. %v", m, v, got, err)
+					}
+				}
+			}
 		}
 	}
 }

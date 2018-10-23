@@ -70,6 +70,17 @@ func (a Matrix3x3) Mul(b Matrix3x3) Matrix3x3 {
 	return r
 }
 
+// MulVec multiplies the matrix and the given vector.
+func (m Matrix3x3) MulVec(x [3]int) [3]int {
+	var r [3]int
+	for i := 0; i < 3; i++ {
+		for j := 0; j < 3; j++ {
+			r[i] += m.Get(i, j) * x[j]
+		}
+	}
+	return r
+}
+
 var matInverses [128]Matrix3x3
 
 func init() {
