@@ -425,7 +425,7 @@ func parseMatType(s string) (MaterialType, error) {
 func parseMatlChunk(c []byte) (int, Material, error) {
 	vr := &voxReader{r: bytes.NewReader(c)}
 	matID := vr.ReadInt32()
-	if matID > 255 || matID < 0 {
+	if matID < 0 {
 		return 0, Material{}, fmt.Errorf("material index %d out of range", matID)
 	}
 	d := vr.ReadDict()
@@ -444,6 +444,12 @@ func parseMatlChunk(c []byte) (int, Material, error) {
 	flux := d.ReadFloat("_flux", 0) * 100
 	plastic := d.ReadBool("_plastic", false)
 	ldr := d.ReadFloat("_ldr", 0) * 100 // not in spec, but present in files
+
+	// TODO: these
+	_ = d.ReadFloat("_g0", 0)
+	_ = d.ReadFloat("_g1", 0)
+	_ = d.ReadFloat("_spec_p", 0)
+	_ = d.ReadFloat("_gw", 0)
 
 	if err := d.Error(); err != nil {
 		return 0, Material{}, fmt.Errorf("dict error reading MATL chunk: %v", err)

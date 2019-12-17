@@ -80,6 +80,18 @@ func TestSceneParse(t *testing.T) {
 	// TODO: verify scene structure etc.
 }
 
+func TestNewAttrsParse(t *testing.T) {
+	// scene.vox contains multiple objects on a few different layers in a scene.
+	main, err := ParseFile("testdata/newattrs.vox")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if main == nil {
+		t.Fatal("no main")
+	}
+	// TODO: verify scene structure etc.
+}
+
 func countVoxels(dw *DenseWorld) (int, error) {
 	count := 0
 	for i := dw.Min[0]; i < dw.Max[0]; i++ {
